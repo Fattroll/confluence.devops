@@ -1,4 +1,9 @@
-# confluence.devops
+## Folder structure:
+docker.img     - Dockerfiles and all stuff needed for images
+infrastructure - Infrasturucture creation scripts (terraform, etc)
+misc           - Additional files
+pipelines      - Jenkins pipelines 
+scripts        - Additional scripts
 
-Automated deployment of Atlassian Confluence. 
-Graduation work for EPAM DevOps course. 
+README.md
+
