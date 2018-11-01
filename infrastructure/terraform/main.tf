@@ -4,32 +4,7 @@ provider "google" {
   zone = "us-east1-c"
 }
 
-resource "google_compute_instance_template" "application_instance_template" {
-  name_prefix  = "instance-template-"
-  machine_type = "f1-micro"
-
-  disk {
-    source_image = "cos-cloud/cos-stable"
-    auto_delete  = true
-    boot         = true
-    }
-
-  // networking
-  network_interface {
-    subnetwork = "${google_compute_subnetwork.group1.self_link}"
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "google_compute_instance_group_manager" "instance_group_manager" {
-  name               = "instance-group-manager"
-  instance_template  = "${google_compute_instance_template.application_instance_template.self_link}"
-  base_instance_name = "application-instance"
-  target_size        = "1"
-}
+#jenkins instance configuration
 
 resource "google_compute_instance" "jenkins-instance" {
   name         = "jenkins"
@@ -40,48 +15,111 @@ resource "google_compute_instance" "jenkins-instance" {
       image = "cos-cloud/cos-stable"
     }
   }
+  attached_disk {
+    source = "${google_compute_disk.jenkins.self_link}"
+  }
   network_interface {
-    subnetwork = "${google_compute_subnetwork.group1.self_link}"
+    subnetwork = "${google_compute_subnetwork.confluence_internal.self_link}"
     access_config = {
     }
   }
+
+  metadata {
+    gce-container-declaration = "${file("jenkins_container.run")}"
+  }
+  service_account {
+    scopes = ["userinfo-email", "compute-ro", "storage-rw"]
+  }
+  depends_on = ["null_resource.jenkins_build_and_push"]
+  allow_stopping_for_update = "true"
 }
 
-resource "google_compute_instance" "bastion-instance" {
-  name         = "bastion"
-  machine_type = "f1-micro"
-  tags = ["bastion", "bash", "side"]
-  boot_disk {
-    initialize_params {
-      image = "debian-cloud/debian-9"
-    }
+resource "null_resource" "jenkins_build_and_push" {
+  provisioner "local-exec" {
+    command = "../../docker.img/jenkins/build.sh"
   }
-  network_interface {
-    subnetwork = "${google_compute_subnetwork.group1.self_link}"
-    access_config = {
-    }
-  }
-  #metadata_startup_script = <<SCRIPT
-  #echo "Hello, World" > index.html
-  #nohup busybox httpd -f -p 8080 &
-  #SCRIPT
+}
+resource "google_compute_disk" "jenkins" {
+  name  = "jenkins-home"
+  type  = "pd-standard"
+  size = "10"
 }
 
-resource "google_compute_instance" "worker-instance" {
-  name         = "worker"
+#nginx configuration
+
+resource "google_compute_instance" "nginx-instance" {
+  name         = "nginx"
   machine_type = "f1-micro"
-  tags = ["bash", "side"]
+  tags = ["nginx", "container"]
   boot_disk {
     initialize_params {
-      image = "debian-cloud/debian-9"
+      image = "cos-cloud/cos-stable"
     }
   }
   network_interface {
-    subnetwork = "${google_compute_subnetwork.group1.self_link}"
+    subnetwork = "${google_compute_subnetwork.confluence_internal.self_link}"
     access_config = {
     }
   }
+
+  metadata {
+    gce-container-declaration = "${file("nginx_container.run")}"
+  }
+  service_account {
+    scopes = ["userinfo-email", "storage-ro"]
+  }
+  depends_on = ["null_resource.proxy_build_and_push"]
+  allow_stopping_for_update = "true"
 }
+
+resource "null_resource" "proxy_build_and_push" {
+  provisioner "local-exec" {
+    command = "../../docker.img/nginx/build.sh"
+  }
+}
+#Confluence instance configuration
+
+resource "google_compute_instance" "confluence-instance" {
+  name         = "confluence"
+  machine_type = "f1-micro"
+  tags = ["confluence", "container"]
+  boot_disk {
+    initialize_params {
+      image = "cos-cloud/cos-stable"
+    }
+  }
+  attached_disk {
+    source = "${google_compute_disk.confluence.self_link}"
+  }
+  network_interface {
+    subnetwork = "${google_compute_subnetwork.confluence_internal.self_link}"
+    network_ip = "10.126.0.100"
+    access_config = {
+    }
+  }
+
+  metadata {
+    gce-container-declaration = "${file("confluence_container.run")}"
+  }
+  service_account {
+    scopes = ["userinfo-email", "compute-ro", "storage-rw"]
+  }
+  depends_on = ["null_resource.confluence_build_and_push"]
+  allow_stopping_for_update = "true"
+}
+
+resource "null_resource" "confluence_build_and_push" {
+  provisioner "local-exec" {
+    command = "../../docker.img/confluence/build.sh"
+  }
+}
+resource "google_compute_disk" "confluence" {
+  name  = "confluence-home"
+  type  = "pd-standard"
+  size = "10"
+}
+
+#database configuration
 
 resource "google_sql_database_instance" "master" {
   database_version = "POSTGRES_9_6"
