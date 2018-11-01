@@ -1,0 +1,1 @@
+"spec:\n  containers:\n    - name: jenkins\n      image: 'gcr.io/confluence-220616/jenkins:0.1'\n      stdin: false\n      tty: false\n  restartPolicy: Always\n"

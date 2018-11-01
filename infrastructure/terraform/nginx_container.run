@@ -1,0 +1,1 @@
+"spec:\n  containers:\n    - name: nginx\n      image: 'gcr.io/confluence-220616/proxy:stable'\n      stdin: false\n      tty: false\n  restartPolicy: Always\n"
